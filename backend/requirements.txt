@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+streamlit
+openai
+chromadb
+azure-storage-blob
+python-dotenv
+pydantic
+requests
+sentence-transformers
+ollama
