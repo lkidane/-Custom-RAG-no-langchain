@@ -10,7 +10,15 @@ if st.button("Submit") and question:
 
     st.subheader("Answer")
     st.write(data["answer"])
+    st.subheader("Sources")
+    st.subheader("Sources")
 
+    citations = data.get("citations", {})
+
+    for doc_id, info in citations.items():
+        st.write(
+            f"{doc_id}: {info['source']} (Chunk {info['chunk']})"
+        )
     # st.subheader("Sources")
     # for s in data["sources"]:
     #     st.write(s)
@@ -25,3 +33,27 @@ if st.button("Submit") and question:
     # else:
     #     st.error(f"API Error: {data}")
 
+
+
+
+
+# Load documents from Chroma
+try:
+    doc_response = requests.get(
+        "http://localhost:8000/documents"
+    )
+
+    documents = doc_response.json().get(
+        "documents",
+        []
+    )
+
+    st.sidebar.header("Indexed Documents")
+
+    for doc in documents:
+        st.sidebar.write(doc)
+
+except Exception as e:
+    st.sidebar.error(
+        f"Could not load documents: {e}"
+    )

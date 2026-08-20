@@ -1,128 +1,169 @@
 import chromadb
-import ollama
+from ollama import Client
 from sentence_transformers import SentenceTransformer
-import fitz
-import uuid
 
-# Load embedding model
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Ollama client
+ollama_client = Client(
+    host="http://localhost:11434"
+)
 
-# Connect to ChromaDB
-chroma = chromadb.PersistentClient(path="./chroma_db")
-collection = chroma.get_or_create_collection(name="documents",
-        metadata={"hnsw:space": "cosine"})
-print(f"Chroma collection '{"documents"}' initialized")
+# Embedding model
+embedding_model = SentenceTransformer(
+    "sentence-transformers/all-MiniLM-L6-v2"
+)
 
+# ChromaDB
+chroma = chromadb.PersistentClient(
+    path="./chroma_db"
+)
 
-
-# splitter = RecursiveCharacterTextSplitter(
-#     chunk_size=1000,
-#     chunk_overlap=200,
-# )
-def split_text(text, chunk_size=1000, overlap=200):
-    chunks = []
-    start = 0
-
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
-
-    return chunks
-
-
-def generate_doc_embeddings():
-    pdf = fitz.open(r"C:\Users\lkidane\Downloads\MachineLearning-Lecture01.pdf",  filetype="pdf")
-
-    text = ""
-
-    for page in pdf:
-        text += page.get_text()
-    if page is not None:
-        print("----------------------file read successful------------------")
-
-    pdf.close()
-    chunks = split_text(text)
-    # chunks = splitter.split_text(text)
-
-    if not chunks:
-        print("No text extracted from PDF")
-
-
-    embeddings = embedding_model.encode(chunks)
-    print("----------------------embeddings created------------------")
-    # collection = get_chroma_collection()
-
-    ids = [str(uuid.uuid4()) for _ in chunks]
-
-    metadatas = [
-        {
-            "source": "MachineLearning-Lecture01.pdf",
-            "chunk": idx,
-        }
-        for idx in range(len(chunks))
-    ]
-    print("----------------------metadata created------------------")
-    collection.add(
-        ids=ids,
-        documents=chunks,
-        embeddings=embeddings,
-        metadatas=metadatas,
-    )
-    print("done making he embeddings")
-    # return chunks
-
+collection = chroma.get_or_create_collection(
+    name="documents"
+)
 
 
 def ask_rag(question: str):
-    # generate embedding
-    # generate_doc_embeddings()
-    # Generate query embedding
-    query_embedding = embedding_model.encode(
-        question,
-        convert_to_numpy=True
-    ).tolist()
 
-    # Search ChromaDB
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=5
-    )
+    try:
 
-    docs = results["documents"][0]
-    metas = results["metadatas"][0]
+        # Create query embedding
+        query_embedding = embedding_model.encode(
+            question,
+            convert_to_numpy=True
+        ).tolist()
 
-    # Build context
-    context = "\n\n".join(docs)
+        # Retrieve relevant chunks
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=5
+        )
 
-    # Ask Ollama
-    response = ollama.chat(
-        model="mymodel",
-        messages=[
-            {
-                "role": "system",
-                "content": """
-    You are a helpful assistant.
+        # if (
+        #     not results.get("documents")
+        #     or len(results[- in range(len(chunks)) ingested {           return {
+        #         "answer": "No relevant documents found.",
+        #         "citations": {}
+        #     }
 
-    Answer only using the provided context.
-    If the answer is not available in the context,
-    respond with 'I don't know'.
-    """
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
+
+        # Build citation-aware context
+        context_parts = []
+
+        for i, (doc, meta) in enumerate(
+            zip(docs, metas),
+            start=1
+        ):
+
+            source = meta.get(
+                "source",
+                "Unknown"
+            )
+
+            chunk = meta.get(
+                "chunk",
+                "Unknown"
+            )
+
+            context_parts.append(
+                f"""
+[DOC{i}]
+Source: {source}
+Chunk: {chunk}
+
+{doc}
+"""
+            )
+
+        context = "\n\n".join(
+            context_parts
+        )
+
+        response = ollama_client.chat(
+            model="mymodel",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+You are a helpful assistant.
+
+Use ONLY the supplied context.
+
+Whenever you use information from a retrieved
+document, cite it using:
+
+[DOC1]
+[DOC2]
+etc.
+
+Example:
+
+Machine learning learns patterns from data [DOC1].
+
+If the answer cannot be found in the context,
+reply exactly:
+
+I don't know
+"""
                 },
                 {
                     "role": "user",
                     "content": f"""
-    Context:
-    {context}
+Context:
 
-    Question:
-    {question}
-    """
+{context}
+
+Question:
+
+{question}
+"""
                 }
             ]
         )
 
-    return {
-        "answer": response["message"]["content"],
-        "sources": [m.get("source", "") for m in metas]
-    }
+        citation_map = {
+            f"DOC{i}": {
+                "source": meta.get("source"),
+                "chunk": meta.get("chunk")
+            }
+            for i, meta in enumerate(
+                metas,
+                start=1
+            )
+        }
+
+        return {
+            "answer": response["message"]["content"],
+            "citations": citation_map
+        }
+
+    except Exception as e:
+
+        return {
+            "answer": f"Error: {str(e)}",
+            "citations": {}
+        }
+
+
+# if __name__ == "__main__":
+
+#     question = (
+#         "What is machine learning?"
+#     )
+
+#     response = ask_rag(question)
+
+#     print("\nANSWER:")
+#     print(response["answer"])
+
+#     print("\nCITATIONS:")
+#     for doc_id, citation in response[
+#         "citations"
+#     ].items():
+
+#         print(
+#             f"{doc_id} -> "
+#             f"{citation['source']} "
+#             f"(chunk {citation['chunk']})"
+#         )
