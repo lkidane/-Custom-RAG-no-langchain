@@ -1,83 +1,143 @@
-import uuid
-import fitz
+# import chromadb
+# from ollama import Client
+# from sentence_transformers import SentenceTransformer
+
+# # Ollama
+# ollama_client = Client(host="http://localhost:11434")
+
+# # Embedding model
+# embedding_model = SentenceTransformer(
+#     "sentence-transformers/all-MiniLM-L6-v2"
+# )
+
+# # ChromaDB
+# chroma = chromadb.PersistentClient(path="./chroma_db")
+# collection = chroma.get_or_create_collection("documents")
+
+
+# def ask_rag(question: str):
+
+#     query_embedding = embedding_model.encode(
+#         question
+#     ).tolist()
+
+#     results = collection.query(
+#         query_embeddings=[query_embedding],
+#         n_results=5
+#     )
+
+#     docs = results["documents"][0]
+#     metas = results["metadatas"][0]
+
+#     context = "\n\n".join(docs)
+
+#     response = ollama_client.chat(
+#         model="mymodel",
+#         messages=[
+#             {
+#                 "role": "system",
+#                 "content": (
+#                     "Answer only using the supplied context. "
+#                     "If the answer is not in the context, say so."
+#                 )
+#             },
+#             {
+#                 "role": "user",
+#                 "content": f"""
+#     Context:
+#     {context}
+
+#     Question:
+#     {question}
+#     """
+#                 }
+#             ]
+#         )
+   
+#     return {
+#         "answer": response["message"]["content"],
+#         "sources": [
+#             m.get("source", "")
+#             for m in metas
+#         ]
+#     }
+
+# new version
 import chromadb
+from ollama import Client
 from sentence_transformers import SentenceTransformer
 
-# Embedding model
+ollama_client = Client(
+    host="http://localhost:11434"
+)
+
 embedding_model = SentenceTransformer(
     "sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# ChromaDB
 chroma = chromadb.PersistentClient(
     path="./chroma_db"
 )
 
 collection = chroma.get_or_create_collection(
-    name="documents",
-    metadata={"hnsw:space": "cosine"}
+    name="documents"
 )
 
 
-def split_text(text, chunk_size=1000, overlap=200):
-    chunks = []
-    start = 0
+def ask_rag(question: str):
+    try:
+        query_embedding = embedding_model.encode(
+            question
+        ).tolist()
 
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += (chunk_size - overlap)
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=5
+        )
 
-    return chunks
+        if not results["documents"] or not results["documents"] return {
+                "answer": "No relevant documents found.",
+                "sources": []
+            }
 
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
 
-def ingest_pdf(pdf_path):
-    pdf = fitz.open(pdf_path)
+        context = "\n\n".join(docs)
 
-    text = ""
-    for page in pdf:
-        text += page.get_text()
+        response = ollama_client.chat(
+            model="mymodel",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Answer only using the supplied context. "
+                        "If the answer is not in the context, say so."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+Context:
+{context}
 
-    pdf.close()
+Question:
+{question}
+"""
+                }
+            ]
+        )
 
-    if not text.strip():
-        print("No text found in PDF")
-        return
-
-    chunks = split_text(text)
-
-    embeddings = embedding_model.encode(
-        chunks
-    ).tolist()
-
-    ids = [str(uuid.uuid4()) for _ in chunks]
-
-    filename = pdf_path.split("\\")[-1].split("/")[-1]
-
-    metadatas = [
-        {
-            "source": filename,
-            "chunk": idx
+        return {
+            "answer": response["message"]["content"],
+            "sources": [
+                m.get("source", "")
+                for m in metas
+            ]
         }
-        for idx in range(len(chunks))
-    ]
 
-    collection.add(
-        ids=ids,
-        documents=chunks,
-        embeddings=embeddings,
-        metadatas=metadatas
-    )
-
-    print(
-        f"Successfully ingested {filename}"
-    )
-    print(
-        f"Stored {len(chunks)} chunks"
-    )
-
-
-# if __name__ == "__main__":
-#     ingest_pdf(
-#         r"C:\Users\lkidane\Downloads\MachineLearning-Lecture01.pdf"
-#     )
+    except Exception as e:
+        return {
+            "answer": f"Error: {e}",
+            "sources": []
+        }

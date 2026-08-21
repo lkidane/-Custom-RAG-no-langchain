@@ -86,26 +86,25 @@ Chunk: {chunk}
                 {
                     "role": "system",
                     "content": """
-You are a helpful assistant.
+You are a retrieval-augmented assistant.
 
-Use ONLY the supplied context.
+STRICT RULES:
 
-Whenever you use information from a retrieved
-document, cite it using:
+1. Use ONLY information found in the provided context.
+2. Every factual statement MUST include at least one citation in the form [n].
+3. Never make a claim without a citation.
+4. If a sentence cannot be supported by a retrieved chunk, do not include that sentence.
+5. If the answer cannot be fully supported by the provided context, respond exactly:
 
-[DOC1]
-[DOC2]
-etc.
+"I cannot answer from the provided documents."
 
-Example:
+6. Do not use prior knowledge.
+7. Do not infer, assume, summarize, or speculate beyond the retrieved context.
+8. Every paragraph must contain at least one citation.
+9. The final answer must contain citations. Answers without citations are invalid.
 
-Machine learning learns patterns from data [DOC1].
-
-If the answer cannot be found in the context,
-reply exactly:
-
-I don't know
 """
+
                 },
                 {
                     "role": "user",
@@ -115,7 +114,6 @@ Context:
 {context}
 
 Question:
-
 {question}
 """
                 }
@@ -132,7 +130,6 @@ Question:
                 start=1
             )
         }
-
         return {
             "answer": response["message"]["content"],
             "citations": citation_map
@@ -140,7 +137,7 @@ Question:
 
     except Exception as e:
 
-        return {
+        return { 
             "answer": f"Error: {str(e)}",
             "citations": {}
         }

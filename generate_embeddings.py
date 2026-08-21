@@ -78,5 +78,6 @@ def generate_doc_embeddings(documet):
 
 if __name__ == "__main__":
 
-    generate_doc_embeddings(  r"C:\Users\lkidane\Downloads\MachineLearning-Lecture04.pdf")
+    generate_doc_embeddings(  r"C:\Users\lkidane\Downloads\DoYouSpeakGenerativeAI.pdf")
     print("done making he embeddings")
+# finally the embeddings are created and stored in the ChromaDB collection named "documents".

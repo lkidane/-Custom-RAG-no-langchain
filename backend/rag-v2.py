@@ -114,7 +114,7 @@ def ask_rag(question: str):
                     "content": f"""
     Context:
     {context}
-
+ 
     Question:
     {question}
     """
@@ -126,3 +126,10 @@ def ask_rag(question: str):
         "answer": response["message"]["content"],
         "sources": [m.get("source", "") for m in metas]
     }
+
+# left side of the code snippet is from generate_embeddings.py, which is responsible for generating embeddings from a PDF document and storing them in a ChromaDB collection. It includes functions to split text into chunks, generate embeddings, and add them to the database.
+# another aspect of the code snippet is from backend/ingest-v2.py, which is responsible for querying the ChromaDB collection using a question, generating an embedding for the question, retrieving relevant documents, and then using Ollama to generate a response based on the context provided by those documents.
+# 1. git
+# 2. fastapi
+# 3. rag tool calling
+# 4. 
