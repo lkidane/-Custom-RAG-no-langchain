@@ -3,69 +3,37 @@ from ollama import Client
 from sentence_transformers import SentenceTransformer
 
 # Ollama client
-ollama_client = Client(
-    host="http://localhost:11434"
-)
+ollama_client = Client(host="http://localhost:11434")
 
 # Embedding model
-embedding_model = SentenceTransformer(
-    "sentence-transformers/all-MiniLM-L6-v2"
-)
+embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 # ChromaDB
-chroma = chromadb.PersistentClient(
-    path="./chroma_db"
-)
-
+chroma = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma.get_or_create_collection(
-    name="documents"
+    name="documents",
+    metadata={"hnsw:space": "cosine"},
 )
 
 
 def ask_rag(question: str):
-
     try:
+        if not question or not question.strip():
+            return {"answer": "Please provide a question.", "citations": {}}
 
-        # Create query embedding
-        query_embedding = embedding_model.encode(
-            question,
-            convert_to_numpy=True
-        ).tolist()
+        query_embedding = embedding_model.encode(question, convert_to_numpy=True).tolist()
+        results = collection.query(query_embeddings=[query_embedding], n_results=5)
 
-        # Retrieve relevant chunks
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=5
-        )
+        documents = results.get("documents", [[]])[0]
+        metadatas = results.get("metadatas", [[]])[0]
 
-        # if (
-        #     not results.get("documents")
-        #     or len(results[- in range(len(chunks)) ingested {           return {
-        #         "answer": "No relevant documents found.",
-        #         "citations": {}
-        #     }
+        if not documents:
+            return {"answer": "No relevant documents found.", "citations": {}}
 
-        docs = results["documents"][0]
-        metas = results["metadatas"][0]
-
-        # Build citation-aware context
         context_parts = []
-
-        for i, (doc, meta) in enumerate(
-            zip(docs, metas),
-            start=1
-        ):
-
-            source = meta.get(
-                "source",
-                "Unknown"
-            )
-
-            chunk = meta.get(
-                "chunk",
-                "Unknown"
-            )
-
+        for i, (doc, meta) in enumerate(zip(documents, metadatas), start=1):
+            source = meta.get("source", "Unknown")
+            chunk = meta.get("chunk", "Unknown")
             context_parts.append(
                 f"""
 [DOC{i}]
@@ -76,10 +44,7 @@ Chunk: {chunk}
 """
             )
 
-        context = "\n\n".join(
-            context_parts
-        )
-
+        context = "\n\n".join(context_parts)
         response = ollama_client.chat(
             model="mymodel",
             messages=[
@@ -102,9 +67,7 @@ STRICT RULES:
 7. Do not infer, assume, summarize, or speculate beyond the retrieved context.
 8. Every paragraph must contain at least one citation.
 9. The final answer must contain citations. Answers without citations are invalid.
-
-"""
-
+""",
                 },
                 {
                     "role": "user",
@@ -115,32 +78,18 @@ Context:
 
 Question:
 {question}
-"""
-                }
-            ]
+""",
+                },
+            ],
         )
 
         citation_map = {
-            f"DOC{i}": {
-                "source": meta.get("source"),
-                "chunk": meta.get("chunk")
-            }
-            for i, meta in enumerate(
-                metas,
-                start=1
-            )
+            f"DOC{i}": {"source": meta.get("source"), "chunk": meta.get("chunk")}
+            for i, meta in enumerate(metadatas, start=1)
         }
-        return {
-            "answer": response["message"]["content"],
-            "citations": citation_map
-        }
-
-    except Exception as e:
-
-        return { 
-            "answer": f"Error: {str(e)}",
-            "citations": {}
-        }
+        return {"answer": response["message"]["content"], "citations": citation_map}
+    except Exception as exc:
+        return {"answer": f"Error: {exc}", "citations": {}}
 
 
 # if __name__ == "__main__":
