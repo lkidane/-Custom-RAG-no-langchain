@@ -3,7 +3,7 @@ import streamlit as st
 
 API_BASE_URL = "http://localhost:8000"
 
-st.title("RAG Chatbot (No LangChain)")
+st.title("RAG Chatbot")
 question = st.text_input("Ask a question")
 
 try:
